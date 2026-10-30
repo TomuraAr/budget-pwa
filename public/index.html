@@ -79,7 +79,7 @@ body[data-theme="light"]{color-scheme:light;--bg:#f5f3ef;--panel:#fff;--panel2:#
   const money=n=>currency.format(Number(n)||0);
   const validDate=s=>/^\d{4}-\d{2}-\d{2}$/.test(s)&&!Number.isNaN(Date.parse(s+'T12:00:00'));
   const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const API='/api';let token=localStorage.getItem('ledgerBudgetToken')||'',syncing=false,syncTimer;
+  const API='https://budget-pwa-1.onrender.com/api';let token=localStorage.getItem('ledgerBudgetToken')||'',syncing=false,syncTimer;
   async function api(path,options={}){const r=await fetch(API+path,{...options,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{}) ,...(options.headers||{})}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||`Request failed (${r.status})`);return d}
   async function syncRemote(){if(!state||!token||syncing)return;syncing=true;try{await api('/budget/sync',{method:'PUT',body:JSON.stringify(state)})}finally{syncing=false}}
   function persist(){localStorage.setItem(STORE,JSON.stringify(state));if(token){clearTimeout(syncTimer);syncTimer=setTimeout(()=>syncRemote().catch(()=>toast('Saved offline. Sync will retry when online.')),450)}}
