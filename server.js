@@ -48,7 +48,7 @@ if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) {
  const email = normalizeEmail(process.env.ADMIN_EMAIL);
  const passwordHash = await bcrypt.hash(process.env.ADMIN_PASSWORD, 12);
  await pool.query(`INSERT INTO users(email,password_hash,role) VALUES($1,$2,'admin')
- ON CONFLICT(email) DO UPDATE SET role='admin'`, [email, passwordHash]);
+ ON CONFLICT(email) DO UPDATE SET role='admin',password_hash=EXCLUDED.password_hash`, [email, passwordHash]);
 }
 
 function normalizeEmail(email) { return String(email || '').trim().toLowerCase(); }
