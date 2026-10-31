@@ -16,6 +16,17 @@ if (!process.env.DATABASE_URL || !jwtSecret || jwtSecret.length < 32) {
   process.exit(1);
 }
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false }, max: 5 });
+app.use((req, res, next) => {
+ const origin = req.headers.origin;
+ if (origin === 'https://tomuraar.github.io') {
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+ }
+ next();
+});
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: '32kb' }));
 app.use(express.static(path.join(root, 'public')));
