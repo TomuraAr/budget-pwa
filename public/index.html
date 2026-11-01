@@ -162,8 +162,9 @@ body[data-theme=light] .field input,body[data-theme=light] .field select{backgro
   async function reportBug(){if(!token){$('authOverlay').classList.add('open');toast('Sign in to send a bug report.');return}const message=prompt('What went wrong?');if(!message)return;try{await api('/bug-reports',{method:'POST',body:JSON.stringify({message,page:location.pathname,appVersion:'budget-v2'})});toast('Bug report sent.')}catch(e){toast(e.message||'Could not send report.')}}
   function showAuthMode(mode){
     const signin=mode==='signin',forgot=mode==='forgot',reset=mode==='reset';
-    ['authEmail','authPassword','authServer','authStatus','authCancel','registerButton','authSubmit','forgotButton'].forEach(id=>{const el=$(id);if(el)el.hidden=!signin});
-    document.querySelectorAll('label[for="authEmail"],label[for="authPassword"],label[for="authServer"]').forEach(el=>el.hidden=!signin);
+    ['authPassword','authServer','authStatus','authCancel','registerButton','authSubmit','forgotButton'].forEach(id=>{const el=$(id);if(el)el.hidden=!signin});
+    $('authEmail').hidden=!(signin||forgot);document.querySelector('label[for="authEmail"]').hidden=!(signin||forgot);
+    document.querySelectorAll('label[for="authPassword"],label[for="authServer"]').forEach(el=>el.hidden=!signin);
     $('authIntro').hidden=!signin;$('forgotPanel').hidden=!forgot;$('resetPanel').hidden=!reset;
   }
   async function sendForgot(){

@@ -129,8 +129,8 @@ app.post('/api/auth/forgot-password', asyncRoute(async (req,res) => {
   const rawToken=crypto.randomBytes(32).toString('base64url');
   const tokenHash=crypto.createHash('sha256').update(rawToken).digest('hex');
   const {rows:created}=await pool.query("INSERT INTO password_reset_tokens(user_id,token_hash,expires_at) VALUES($1,$2,NOW()+INTERVAL '30 minutes') RETURNING id",[rows[0].id,tokenHash]);
-  const base=(process.env.RESET_URL_BASE||'https://tomuraar.github.io/budget-pwa').replace(/\/$/,'');
-  const resetUrl=`${base}/?reset=${encodeURIComponent(rawToken)}`;
+  const base=(process.env.RESET_URL_BASE||'https://tomuraar.github.io/budget-pwa/').replace(/\/$/,'');
+  const resetUrl=`${base}?reset=${encodeURIComponent(rawToken)}`;
   try { await sendPasswordResetEmail(rows[0].email,resetUrl); }
   catch (error) { await pool.query('DELETE FROM password_reset_tokens WHERE id=$1',[created[0].id]); throw error; }
  }
