@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import pg from 'pg';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const { Pool } = pg;
@@ -53,7 +54,13 @@ CREATE TABLE IF NOT EXISTS bug_reports (
  id BIGSERIAL PRIMARY KEY, user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
  message TEXT NOT NULL, page TEXT NOT NULL DEFAULT '', app_version TEXT NOT NULL DEFAULT 'v2',
  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);`);
+);
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+ id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ token_hash TEXT NOT NULL UNIQUE, expires_at TIMESTAMPTZ NOT NULL, used_at TIMESTAMPTZ,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS password_reset_tokens_user ON password_reset_tokens(user_id, created_at DESC);`);
 
 if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) {
  const email = normalizeEmail(process.env.ADMIN_EMAIL);
@@ -64,6 +71,25 @@ if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) {
 
 function normalizeEmail(email) { return String(email || '').trim().toLowerCase(); }
 function fail(res, code, error) { return res.status(code).json({ error }); }
+function resetEmailConfig() { return Boolean(process.env.RESEND_API_KEY && process.env.RESET_EMAIL_FROM); }
+async function sendPasswordResetEmail(email, url) {
+ const response = await fetch('https://api.resend.com/emails', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+   from: process.env.RESET_EMAIL_FROM,
+   to: [email],
+   subject: 'Reset your Ledger password',
+   text: `We received a request to reset your Ledger password. This link expires in 30 minutes and can only be used once:\n\n${url}\n\nIf you did not request this, you can ignore this email.`,
+   html: `<p>We received a request to reset your Ledger password.</p><p><a href="${url}">Reset your password</a></p><p>This link expires in 30 minutes and can only be used once. If you did not request this, you can ignore this email.</p>`
+  })
+ });
+ if (!response.ok) {
+  const detail = await response.text().catch(() => '');
+  console.error('password reset email provider returned', response.status, detail.slice(0, 500));
+  throw new Error('Password reset email could not be sent');
+ }
+}
 function auth(req, res, next) {
  const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
  try { req.user = jwt.verify(token, jwtSecret); next(); } catch { return fail(res, 401, 'Sign in required'); }
@@ -92,6 +118,41 @@ app.post('/api/auth/login', asyncRoute(async (req,res) => {
  const u=rows[0]; await pool.query('UPDATE users SET last_seen_at=NOW(),login_count=login_count+1 WHERE id=$1',[u.id]);
  const token=jwt.sign({id:u.id,email:u.email,role:u.role},jwtSecret,{expiresIn:'30d'});
  res.json({token,user:{id:u.id,email:u.email,role:u.role}});
+}));
+app.get('/api/auth/reset-status', (_req,res) => res.json({enabled:resetEmailConfig()}));
+app.post('/api/auth/forgot-password', asyncRoute(async (req,res) => {
+ const email=normalizeEmail(req.body.email);
+ if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail(res,400,'Enter a valid email address');
+ if (!resetEmailConfig()) return fail(res,503,'Password reset email is not configured yet');
+ const {rows}=await pool.query('SELECT id,email FROM users WHERE email=$1',[email]);
+ if (rows.length) {
+  const rawToken=crypto.randomBytes(32).toString('base64url');
+  const tokenHash=crypto.createHash('sha256').update(rawToken).digest('hex');
+  const {rows:created}=await pool.query("INSERT INTO password_reset_tokens(user_id,token_hash,expires_at) VALUES($1,$2,NOW()+INTERVAL '30 minutes') RETURNING id",[rows[0].id,tokenHash]);
+  const base=(process.env.RESET_URL_BASE||'https://tomuraar.github.io/budget-pwa').replace(/\/$/,'');
+  const resetUrl=`${base}/?reset=${encodeURIComponent(rawToken)}`;
+  try { await sendPasswordResetEmail(rows[0].email,resetUrl); }
+  catch (error) { await pool.query('DELETE FROM password_reset_tokens WHERE id=$1',[created[0].id]); throw error; }
+ }
+ res.json({ok:true,message:'If an account exists for that email, a reset link has been sent.'});
+}));
+app.post('/api/auth/reset-password', asyncRoute(async (req,res) => {
+ const rawToken=String(req.body.token||''), password=String(req.body.password||'');
+ if (rawToken.length<32 || rawToken.length>200) return fail(res,400,'This reset link is invalid or expired');
+ if (password.length<10 || password.length>200) return fail(res,400,'Use a password of at least 10 characters');
+ const tokenHash=crypto.createHash('sha256').update(rawToken).digest('hex');
+ const client=await pool.connect();
+ try {
+  await client.query('BEGIN');
+  const {rows}=await client.query('SELECT id,user_id FROM password_reset_tokens WHERE token_hash=$1 AND used_at IS NULL AND expires_at>NOW() FOR UPDATE',[tokenHash]);
+  if (!rows.length) { await client.query('ROLLBACK'); return fail(res,400,'This reset link is invalid, expired, or already used'); }
+  const passwordHash=await bcrypt.hash(password,12);
+  await client.query('UPDATE users SET password_hash=$2 WHERE id=$1',[rows[0].user_id,passwordHash]);
+  await client.query('UPDATE password_reset_tokens SET used_at=NOW() WHERE user_id=$1 AND used_at IS NULL',[rows[0].user_id]);
+  await client.query('COMMIT');
+  res.json({ok:true,message:'Password updated. You can now sign in.'});
+ } catch(error) { await client.query('ROLLBACK'); throw error; }
+ finally { client.release(); }
 }));
 app.get('/api/me',auth,asyncRoute(async(req,res)=>{const {rows}=await pool.query('SELECT id,email,role FROM users WHERE id=$1',[req.user.id]);if(!rows.length)return fail(res,401,'Account no longer exists');res.json({user:rows[0]})}));
 app.get('/api/budget',auth,asyncRoute(async(req,res)=>{
