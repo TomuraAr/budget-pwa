@@ -49,7 +49,7 @@ body[data-theme=light] .field input,body[data-theme=light] .field select{backgro
       <div class="section-head" style="margin-top:42px"><h2>Your data</h2></div>
       <div class="content-panel data-panel"><p class="sync-note" id="syncNote"></p>
         <h3>Statements</h3><div class="entry-actions"><button type="button" class="button secondary" id="statementButton">Download statement (PDF)</button><button type="button" class="button secondary" id="csvButton">Export CSV</button></div>
-        <h3>Share or back up your history</h3><div class="entry-actions"><button type="button" class="button secondary" id="shareHistoryButton">Share history</button><button type="button" class="button secondary" id="backupButton">Export history</button><button type="button" class="button secondary" id="restoreButton">Import history</button></div>
+        <h3>Share or back up your history</h3><div class="entry-actions"><button type="button" class="button secondary" id="shareHistoryButton">Share readable history</button><button type="button" class="button secondary" id="backupButton">Download JSON backup</button><button type="button" class="button secondary" id="restoreButton">Import history</button></div>
         <h3>Security and help</h3><div class="entry-actions"><button type="button" class="button secondary" id="pinSettingsButton">PIN lock</button><button type="button" class="button secondary" id="bugButton">Report a bug</button><button type="button" class="reset-button" id="resetButton">Reset everything</button></div>
         <input type="file" id="restoreFile" accept=".json,application/json,text/plain" hidden></div>
     </section>
@@ -228,15 +228,31 @@ body[data-theme=light] .field input,body[data-theme=light] .field select{backgro
     const name=`ledger-history-${localDate()}.json`,data=JSON.stringify({app:'ledger',version:2,exportedAt:new Date().toISOString(),startingBalance:state.startingBalance,balanceOverrides:state.balanceOverrides||[],entries:state.entries},null,1);
     return {name,data,file:new File([data],name,{type:'application/json'})};
   }
+  function shareableHistory(){
+    if(!state)return null;
+    const entries=[...state.entries].sort((a,b)=>a.date.localeCompare(b.date)||a.createdAt-b.createdAt),balances=balMap();
+    const csvEscape=value=>'"'+String(value??'').replace(/"/g,'""')+'"';
+    const rows=[['LEDGER HISTORY'],['Prepared',new Date().toLocaleDateString('en-GB')],['Starting balance',money(state.startingBalance)],[],['Date','Type','Description','Category','Amount','Running balance','Reference'],...entries.map(e=>[dfmt(e.date),e.type==='in'?'Money in':'Money out',e.type==='out'?e.description:'Income',e.type==='out'?(e.category||'Other'):'',money(e.amount),money(balances.get(e.id)),ref(e)])];
+    const data='\ufeff'+rows.map(r=>r.map(csvEscape).join(',')).join('\r\n');
+    const name=`ledger-history-${localDate()}.csv`;
+    return {name,data,file:new File([data],name,{type:'text/csv;charset=utf-8'})};
+  }
   async function shareHistory(){
-    const backup=historyExport();if(!backup)return;
-    if(navigator.share&&navigator.canShare&&navigator.canShare({files:[backup.file]})){
-      try{await navigator.share({files:[backup.file],title:'Ledger history',text:'My Ledger history backup'});}
-      catch(error){if(error&&error.name==='AbortError')return;toast('Could not open the share sheet. Try Export history instead.');}
-      return;
+    const shared=shareableHistory();if(!shared)return toast('Add a balance first.');
+    if(navigator.share){
+      try{
+        const payload={title:'Ledger history',text:'Ledger history, opens as a spreadsheet or table.',files:[shared.file]};
+        if(navigator.canShare&&!navigator.canShare({files:[shared.file]}))throw Object.assign(new Error('file-share-unavailable'),{name:'FileShareUnavailable'});
+        await navigator.share(payload);return;
+      }catch(error){
+        if(error&&error.name==='AbortError')return;
+        if(/NotAllowed|Security|InvalidState/.test(error&&error.name||'')){
+          try{await navigator.share({title:'Ledger history',text:`${shared.name} is ready to share. Use “Share readable history” again from your phone's browser menu.`});return}catch(second){if(second&&second.name==='AbortError')return}
+        }
+      }
     }
-    dl(backup.name,backup.data,'application/json');
-    toast('File sharing is not supported here. History downloaded instead.');
+    dl(shared.name,shared.data,'text/csv;charset=utf-8');
+    toast('Readable history downloaded as a spreadsheet file. Use your phone’s share menu to send it.');
   }
   function exportHistory(){
     const backup=historyExport();if(!backup)return;
