@@ -49,7 +49,7 @@ body[data-theme=light] .field input,body[data-theme=light] .field select{backgro
       <div class="section-head" style="margin-top:42px"><h2>Your data</h2></div>
       <div class="content-panel data-panel"><p class="sync-note" id="syncNote"></p>
         <h3>Statements</h3><div class="entry-actions"><button type="button" class="button secondary" id="statementButton">Download statement (PDF)</button><button type="button" class="button secondary" id="csvButton">Export CSV</button></div>
-        <h3>Share or back up your history</h3><div class="entry-actions"><button type="button" class="button secondary" id="backupButton">Export history</button><button type="button" class="button secondary" id="restoreButton">Import history</button></div>
+        <h3>Share or back up your history</h3><div class="entry-actions"><button type="button" class="button secondary" id="shareHistoryButton">Share history</button><button type="button" class="button secondary" id="backupButton">Export history</button><button type="button" class="button secondary" id="restoreButton">Import history</button></div>
         <h3>Security and help</h3><div class="entry-actions"><button type="button" class="button secondary" id="pinSettingsButton">PIN lock</button><button type="button" class="button secondary" id="bugButton">Report a bug</button><button type="button" class="reset-button" id="resetButton">Reset everything</button></div>
         <input type="file" id="restoreFile" accept=".json,application/json,text/plain" hidden></div>
     </section>
@@ -198,13 +198,24 @@ body[data-theme=light] .field input,body[data-theme=light] .field select{backgro
   function openStatement(key){const keys=[...new Set(state.entries.map(monthOf))].sort().reverse();$('stmtPeriod').innerHTML='<option value="all">All months</option>'+keys.map(k=>`<option value="${k}">${escapeHtml(fmtM(k))}</option>`).join('');$('stmtPeriod').value=key&&keys.includes(key)?key:'all';$('stmtName').value=prefs.name||'';$('stmtOverlay').classList.add('open')}
   function printStatement(period,name){if(!state||!state.entries.length)return toast('Add an entry first.');$('stmt').innerHTML=buildStatement(period,name);document.title='Ledger-statement-'+period;setTimeout(()=>window.print(),200)}
   window.addEventListener('afterprint',()=>{$('stmt').innerHTML='';document.title='Ledger | Personal budget'});
-  async function exportHistory(){
-    if(!state)return;
+  function historyExport(){
+    if(!state)return null;
     const name=`ledger-history-${localDate()}.json`,data=JSON.stringify({app:'ledger',version:2,exportedAt:new Date().toISOString(),startingBalance:state.startingBalance,balanceOverrides:state.balanceOverrides||[],entries:state.entries},null,1);
-    let file=new File([data],name,{type:'application/json'});if(!(navigator.canShare&&navigator.canShare({files:[file]})))file=new File([data],name,{type:'text/plain'});
-    let c='alt';if(navigator.canShare&&navigator.canShare({files:[file]})){c=await ask('Share your history with someone, or save a copy on this phone?','Share…','Save to phone');if(!c)return}
-    if(c===true){try{await navigator.share({files:[file],title:'Ledger history'})}catch{}return}
-    dl(name,data,'application/json');toast('History saved to your downloads.')
+    return {name,data,file:new File([data],name,{type:'application/json'})};
+  }
+  async function shareHistory(){
+    const backup=historyExport();if(!backup)return;
+    if(navigator.share&&navigator.canShare&&navigator.canShare({files:[backup.file]})){
+      try{await navigator.share({files:[backup.file],title:'Ledger history',text:'My Ledger history backup'});}
+      catch(error){if(error&&error.name==='AbortError')return;toast('Could not open the share sheet. Try Export history instead.');}
+      return;
+    }
+    dl(backup.name,backup.data,'application/json');
+    toast('File sharing is not supported here. History downloaded instead.');
+  }
+  function exportHistory(){
+    const backup=historyExport();if(!backup)return;
+    dl(backup.name,backup.data,'application/json');toast('History saved to your downloads.');
   }
   function getEntries(){return [...state.entries].sort((a,b)=>b.date.localeCompare(a.date)||b.createdAt-a.createdAt)}
   function balanceAt(endDate){const overrides=(state.balanceOverrides||[]).filter(o=>o.date<=endDate).sort((a,b)=>a.date.localeCompare(b.date)||a.createdAt-b.createdAt);const latest=overrides[overrides.length-1];if(!latest)return Number(state.startingBalance)+state.entries.filter(e=>e.date<=endDate).reduce((sum,e)=>sum+(e.type==='in'?Number(e.amount):-Number(e.amount)),0);return Number(latest.balance)+state.entries.filter(e=>e.date<=endDate&&(e.date>latest.date||(e.date===latest.date&&Number(e.createdAt)>Number(latest.createdAt)))).reduce((sum,e)=>sum+(e.type==='in'?Number(e.amount):-Number(e.amount)),0)}
@@ -271,6 +282,7 @@ body[data-theme=light] .field input,body[data-theme=light] .field select{backgro
       balanceOverrides:Array.isArray(p.balanceOverrides)?p.balanceOverrides.filter(o=>o&&validDate(o.date)&&Number.isFinite(Number(o.balance))&&Number(o.balance)>=0).map(o=>({balance:Number(o.balance),date:o.date,createdAt:Number(o.createdAt)||0})):[],
       entries:p.entries.filter(e=>e&&validDate(e.date)&&Number.isFinite(Number(e.amount))&&Number(e.amount)>0&&(e.type==='in'||e.type==='out')&&(e.type==='in'||typeof e.description==='string')).map(e=>({...e,id:/^[\da-f-]{36}$/i.test(String(e.id))?String(e.id):uuid(),description:e.type==='in'?'':String(e.description).slice(0,100),category:e.type==='out'&&CATEGORIES.includes(e.category)?e.category:'Other',amount:Number(e.amount),createdAt:Number(e.createdAt)||0}))};
   }
+  $('shareHistoryButton').addEventListener('click',shareHistory);
   $('backupButton').addEventListener('click',exportHistory);
   $('restoreButton').addEventListener('click',()=>$('restoreFile').click());
   $('setupRestore').addEventListener('click',()=>$('restoreFile').click());
