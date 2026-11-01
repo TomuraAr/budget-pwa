@@ -49,8 +49,8 @@ body[data-theme=light] .field input,body[data-theme=light] .field select{backgro
       <div class="section-head" style="margin-top:42px"><h2>Your data</h2></div>
       <div class="content-panel data-panel"><p class="sync-note" id="syncNote"></p>
         <h3>Statements</h3><div class="entry-actions"><button type="button" class="button secondary" id="statementButton">Download statement (PDF)</button><button type="button" class="button secondary" id="csvButton">Export CSV</button></div>
-        <h3>Share or back up your history</h3><div class="entry-actions"><button type="button" class="button secondary" id="shareHistoryButton">Share history</button><button type="button" class="button secondary" id="backupButton">Download JSON backup</button><button type="button" class="button secondary" id="restoreButton">Import history</button></div>
-<h3>Security and help</h3><div class="entry-actions"><button type="button" class="button secondary" id="pinSettingsButton">PIN lock</button><button type="button" class="button secondary" id="bugButton">Report a bug</button><button type="button" class="reset-button" id="resetButton">Reset everything</button></div>
+        <h3>Share or back up your history</h3><div class="entry-actions"><button type="button" class="button secondary" id="backupButton">Export history</button><button type="button" class="button secondary" id="restoreButton">Import history</button></div>
+        <h3>Security</h3><div class="entry-actions"><button type="button" class="button secondary" id="pinSettingsButton">PIN lock</button><button type="button" class="reset-button" id="resetButton">Reset everything</button></div>
         <input type="file" id="restoreFile" accept=".json,application/json,text/plain" hidden></div>
     </section>
     <section class="view" id="monthView">
@@ -271,8 +271,6 @@ body[data-theme=light] .field input,body[data-theme=light] .field select{backgro
       balanceOverrides:Array.isArray(p.balanceOverrides)?p.balanceOverrides.filter(o=>o&&validDate(o.date)&&Number.isFinite(Number(o.balance))&&Number(o.balance)>=0).map(o=>({balance:Number(o.balance),date:o.date,createdAt:Number(o.createdAt)||0})):[],
       entries:p.entries.filter(e=>e&&validDate(e.date)&&Number.isFinite(Number(e.amount))&&Number(e.amount)>0&&(e.type==='in'||e.type==='out')&&(e.type==='in'||typeof e.description==='string')).map(e=>({...e,id:/^[\da-f-]{36}$/i.test(String(e.id))?String(e.id):uuid(),description:e.type==='in'?'':String(e.description).slice(0,100),category:e.type==='out'&&CATEGORIES.includes(e.category)?e.category:'Other',amount:Number(e.amount),createdAt:Number(e.createdAt)||0}))};
   }
-  $('shareHistoryButton').addEventListener('click',async()=>{if(!state)return toast('Add a balance first.');const name=`ledger-history-${localDate()}.json`,data=JSON.stringify({app:'ledger',version:2,exportedAt:new Date().toISOString(),startingBalance:state.startingBalance,balanceOverrides:state.balanceOverrides||[],entries:state.entries},null,1);const file=new File([data],name,{type:'application/json'});if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){try{await navigator.share({files:[file],title:'Ledger history'});return}catch(e){if(e.name==='AbortError')return}}dl(name,data,'application/json');toast('History saved to your downloads.')});
-  $('bugButton').addEventListener('click',reportBug);
   $('backupButton').addEventListener('click',exportHistory);
   $('restoreButton').addEventListener('click',()=>$('restoreFile').click());
   $('setupRestore').addEventListener('click',()=>$('restoreFile').click());
