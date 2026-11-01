@@ -1,17 +1,36 @@
 {
-  "name": "Budget",
-  "short_name": "Budget",
-  "start_url": "./budget_app.html",
-  "scope": "./",
-  "display": "standalone",
-  "background_color": "#111416",
-  "theme_color": "#111416",
-  "icons": [
-    {
-      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23111416'/%3E%3Cpath d='M18 46V18h5v11h18V18h5v28h-5V34H23v12z' fill='%23f1f0eb'/%3E%3Cpath d='M18 51h28' stroke='%23d17a4b' stroke-width='4'/%3E%3C/svg%3E",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    }
-  ]
+ "id": "./",
+ "name": "Budget – Personal budget",
+ "short_name": "Budget",
+ "description": "A clear personal budget tracker in naira with bank-style statements.",
+ "start_url": "./",
+ "scope": "./",
+ "display": "standalone",
+ "orientation": "portrait",
+ "background_color": "#0e1214",
+ "theme_color": "#111416",
+ "categories": [
+  "finance",
+  "productivity"
+ ],
+ "icons": [
+  {
+   "src": "icon-192.png",
+   "sizes": "192x192",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "icon-maskable-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "maskable"
+  }
+ ]
 }
